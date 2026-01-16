@@ -20,6 +20,11 @@ import edu.wpi.first.networktables.NetworkTableInstance;
 import frc.robot.Constants;
 
 public class Camera {
+
+    /* =====================================================
+     * 0. VARIABLES
+     * ===================================================== */
+
     private PhotonCamera camera; // The PhotonCamera instance
     private String cameraName; // The name of the camera
     private Type type; // The type of object the camera detects
@@ -52,6 +57,10 @@ public class Camera {
         OBJECT,
         DISCONNECTED // Skips the camera in all logic
     }
+
+    /* =====================================================
+     * 1. CONSTRUCTOR METHODS
+     * ===================================================== */
 
     /**
      * Constructor for the Camera class.
@@ -100,6 +109,10 @@ public class Camera {
         return null; // Return null if loading fails
     }
 
+    /* =====================================================
+     * 2. UTILITY / LIFECYCLE METHODS
+     * ===================================================== */
+
     /**
      * Updates the camera to store its latest results for use in methods.
      */
@@ -127,64 +140,9 @@ public class Camera {
         return camera.isConnected(); // Return if the camera is connected or not
     }
 
-    /**
-     * Adjust the raw pose obtained from the camera to account for the camera's
-     * position and orientation on the robot.
-     * 
-     * @param rawPose - the raw Pose3d obtained from the camera.
-     * @return Adjusted Pose3d representing the robot's pose on the field.
-     */
-    private Pose3d adjustPose(Transform3d rawPose) {
-        if (rawPose == null) { // If the raw pose is null, return null
-            return null;
-        }
-
-        if (type == Type.APRIL_TAG) { // if it is an aprilTag value, normalize the yaw
-            rawPose = normalizeYaw(rawPose);
-        }
-
-        if (robotToCameraTransform.getRotation().getY() != 0) {
-            double pitch = robotToCameraTransform.getRotation().getY(); // get the pitch
-            double hypotenuse = rawPose.getTranslation().getX();
-
-            double XPitchFix = hypotenuse * Math.cos(pitch); // fix the forward distance
-            double YPitchFix = rawPose.getTranslation().getY(); // no need to fix anything
-            double ZPitchFix = hypotenuse * Math.sin(pitch); // fix the vertical distance
-
-            rawPose = new Transform3d(XPitchFix, YPitchFix, ZPitchFix, rawPose.getRotation());
-        }
-
-        Transform3d adjustedPose = rawPose.plus(robotToCameraTransform); // Adjust the raw pose by adding the
-                                                                         // robot-to-camera transform, TODO: CHECK IF
-                                                                         // THIS NEEDS TO BE SUBTRACTED
-
-        return new Pose3d(adjustedPose.getTranslation(), adjustedPose.getRotation()); // Return the adjusted pose as a
-                                                                                      // Pose3d
-    }
-
-    /**
-     * Normalizes the yaw of the given transform3d so that the April Tag values
-     * given by Photon do not have 180° as centered
-     * 
-     * @param rawTransform - The raw, not normalized transform3d
-     * @return The normalized transform3d
-     */
-    private Transform3d normalizeYaw(Transform3d rawTransform) {
-        double yawValue = rawTransform.getRotation().getZ();
-
-        if (Math.abs(yawValue) > 90 * Math.PI/180) { 
-            yawValue = Math.PI - Math.abs(yawValue) * -1 * (yawValue/Math.abs(yawValue));
-        }
-        else {
-            return rawTransform;
-        }
-
-        Rotation3d rotation = rawTransform.getRotation();
-
-
-        return new Transform3d(rawTransform.getTranslation(),
-                               new Rotation3d(rotation.getX(), rotation.getY(), yawValue));
-    }
+    /* =====================================================
+     * 3. GLOBAL POSE
+     * ===================================================== */
 
     /**
      * Get the global field pose of the robot as estimated by the camera.
@@ -212,6 +170,10 @@ public class Camera {
 
         return null; // Return null if no valid pose is estimated
     }
+
+    /* =====================================================
+     * 4. APRILTAG METHODS
+     * ===================================================== */
 
     /**
      * Get a list of all available AprilTag IDs detected by the camera.
@@ -266,34 +228,10 @@ public class Camera {
         return null; // Return null if the specified tagID is not found
     }
 
-    /**
-     * DEPRACATED UNTIL FURTHER NOTICE, DOES NOT WORK
-     * Get the pose of a specific AprilTag relative to the robot.
-     * 
-     * @param tagID - the ID of the AprilTag to find.
-     * @return Pose3d of the specified tag relative to the robot, or null if not
-     *         found.
-     */
-    public Pose3d getBotRelativeToTag(int tagID) {
-        // Pose3d tagRelativeToBot = getTagRelativeToBot(tagID); // Get the pose of the
-        // tag relative to the robot
-
-        // if (tagRelativeToBot == null) { // If the tag relative to bot is null, return
-        // null
-        // return null;
-        // }
-
-        // Transform3d botRelativeToTag = new
-        // Transform3d(tagRelativeToBot.getTranslation(),
-        // tagRelativeToBot.getRotation()).inverse(); // Invert the transform to get the
-        // robot relative to the tag
-
-        // return new Pose3d(botRelativeToTag.getTranslation(),
-        // botRelativeToTag.getRotation()); // Return the pose of the robot relative to
-        // the tag
-        return null;
-    }
-
+    /* =====================================================
+     * 5. OBJECT DETECTION
+     * ===================================================== */
+    
     /**
      * Get a list of all of the specific object poses of the type passed
      * 
@@ -368,6 +306,73 @@ public class Camera {
 
         return new Transform3d(new Translation3d(X, Y, Z), new Rotation3d());
     }
+
+    /* =====================================================
+     * 6. POSE ADJUSTMENT
+     * ===================================================== */
+
+    /**
+     * Adjust the raw pose obtained from the camera to account for the camera's
+     * position and orientation on the robot.
+     * 
+     * @param rawPose - the raw Pose3d obtained from the camera.
+     * @return Adjusted Pose3d representing the robot's pose on the field.
+     */
+    private Pose3d adjustPose(Transform3d rawPose) {
+        if (rawPose == null) { // If the raw pose is null, return null
+            return null;
+        }
+
+        if (type == Type.APRIL_TAG) { // if it is an aprilTag value, normalize the yaw
+            rawPose = normalizeYaw(rawPose);
+        }
+
+        if (robotToCameraTransform.getRotation().getY() != 0) {
+            double pitch = robotToCameraTransform.getRotation().getY(); // get the pitch
+            double hypotenuse = rawPose.getTranslation().getX();
+
+            double XPitchFix = hypotenuse * Math.cos(pitch); // fix the forward distance
+            double YPitchFix = rawPose.getTranslation().getY(); // no need to fix anything
+            double ZPitchFix = hypotenuse * Math.sin(pitch); // fix the vertical distance
+
+            rawPose = new Transform3d(XPitchFix, YPitchFix, ZPitchFix, rawPose.getRotation());
+        }
+
+        Transform3d adjustedPose = rawPose.plus(robotToCameraTransform); // Adjust the raw pose by adding the
+                                                                         // robot-to-camera transform, TODO: CHECK IF
+                                                                         // THIS NEEDS TO BE SUBTRACTED
+
+        return new Pose3d(adjustedPose.getTranslation(), adjustedPose.getRotation()); // Return the adjusted pose as a
+                                                                                      // Pose3d
+    }
+
+    /**
+     * Normalizes the yaw of the given transform3d so that the April Tag values
+     * given by Photon do not have 180° as centered
+     * 
+     * @param rawTransform - The raw, not normalized transform3d
+     * @return The normalized transform3d
+     */
+    private Transform3d normalizeYaw(Transform3d rawTransform) {
+        double yawValue = rawTransform.getRotation().getZ();
+
+        if (Math.abs(yawValue) > 90 * Math.PI/180) { 
+            yawValue = Math.PI - Math.abs(yawValue) * -1 * (yawValue/Math.abs(yawValue));
+        }
+        else {
+            return rawTransform;
+        }
+
+        Rotation3d rotation = rawTransform.getRotation();
+
+
+        return new Transform3d(rawTransform.getTranslation(),
+                               new Rotation3d(rotation.getX(), rotation.getY(), yawValue));
+    }
+
+    /* =====================================================
+     * 7. GETTERS / SETTERS
+     * ===================================================== */
 
     /**
      * Get the type of object the camera detects.

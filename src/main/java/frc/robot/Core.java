@@ -20,7 +20,7 @@ import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Direction;
 
 import frc.robot.generated.TunerConstants;
-import frc.robot.subsystems.CommandSwerveDrivetrain;
+import frc.robot.subsystems.DriveSubsystem;
 import frc.robot.subsystems.Vision.VisionSubsystem;
 
 public class Core {
@@ -38,7 +38,7 @@ public class Core {
 
     private final CommandXboxController driveController = new CommandXboxController(0);
 
-    public final CommandSwerveDrivetrain drivetrain = TunerConstants.createDrivetrain();
+    public final DriveSubsystem drivetrain = TunerConstants.createDrivetrain();
 
     public final VisionSubsystem vision = new VisionSubsystem();
 
@@ -46,7 +46,7 @@ public class Core {
 
     public Core() {
         configureBindings();
-        configureShuffleBoard();
+        //configureShuffleBoard();
     }
 
     public void configureShuffleBoard() {

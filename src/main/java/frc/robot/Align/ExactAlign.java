@@ -17,7 +17,7 @@ import frc.robot.Constants;
 import frc.robot.subsystems.DriveSubsystem;
 import frc.robot.subsystems.Vision.VisionSubsystem;
 
-public class DirectAlign extends Command {
+public class ExactAlign extends Command {
 
     private final SwerveRequest.RobotCentric driveRequest = new SwerveRequest.RobotCentric()
             .withDriveRequestType(DriveRequestType.OpenLoopVoltage);
@@ -74,8 +74,8 @@ public class DirectAlign extends Command {
 
     boolean finishedOverride;
 
-    public DirectAlign(DriveSubsystem drivetrain, VisionSubsystem visionSubsystem) {
-        System.out.println("DirectAlign created");
+    public ExactAlign(DriveSubsystem drivetrain, VisionSubsystem visionSubsystem) {
+        System.out.println("ExactAlign created");
         finishedOverride = false;
 
         this.drivetrain = drivetrain;
@@ -100,8 +100,8 @@ public class DirectAlign extends Command {
         yawController.enableContinuousInput(-Math.PI, Math.PI);
     }
 
-    public DirectAlign(DriveSubsystem drivetrain, VisionSubsystem visionSubsystem, Target target) {
-        System.out.println("DirectAlign created");
+    public ExactAlign(DriveSubsystem drivetrain, VisionSubsystem visionSubsystem, Target target) {
+        System.out.println("ExactAlign created");
         finishedOverride = false;
 
         this.drivetrain = drivetrain;
@@ -136,7 +136,7 @@ public class DirectAlign extends Command {
 
     @Override
     public void initialize() {
-        System.out.println("DirectAlign STARTED");
+        System.out.println("EXACTALIGN STARTED");
         System.out.println("Tag ID: " + tagId);
 
         finishedOverride = false;
@@ -163,7 +163,8 @@ public class DirectAlign extends Command {
 
             this.tagId = vision.getAllVisibleTagIDs().get(0);
     
-            Target autoTarget = new Target(tagId, new Transform3d());
+            Target autoTarget = new Target(tagId, new Transform3d(Constants.AUTO_X_OFFSET, Constants.AUTO_Y_OFFSET, Constants.AUTO_Z_OFFSET, 
+                                                  new Rotation3d(Constants.AUTO_ROLL_OFFSET, Constants.AUTO_PITCH_OFFSET, Constants.AUTO_YAW_OFFSET)));
     
             Transform3d tagRelativePose = autoTarget.requestFiducialOffset().orElse(new Transform3d());
     
@@ -320,9 +321,9 @@ public class DirectAlign extends Command {
         drivetrain.setControl(new SwerveRequest.SwerveDriveBrake());
         
         if (interrupted) {
-            System.out.println("DirectAlign INTERRUPTED");
+            System.out.println("EXACTALIGN INTERRUPTED");
         } else {
-            System.out.println("DirectAlign FINISHED");
+            System.out.println("EXACTALIGN FINISHED");
         }
     }
 
