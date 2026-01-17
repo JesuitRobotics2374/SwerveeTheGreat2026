@@ -3,8 +3,6 @@ package frc.robot.subsystems.Vision;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.photonvision.EstimatedRobotPose;
-
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Transform3d;
@@ -390,5 +388,11 @@ public class VisionSubsystem extends SubsystemBase {
     @Override
     public void periodic() {
         updateResults(); // Update camera results periodically
+
+        clock++;
+
+        if (clock >= 1) {
+            clock = 0;
+        }
     }
 }

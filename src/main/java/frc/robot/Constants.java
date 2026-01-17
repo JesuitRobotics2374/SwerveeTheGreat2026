@@ -1,11 +1,6 @@
 package frc.robot;
 
-import java.nio.file.Paths;
-
 import edu.wpi.first.apriltag.AprilTagFields;
-import edu.wpi.first.units.measure.Angle;
-import edu.wpi.first.units.measure.Distance;
-import edu.wpi.first.wpilibj.Filesystem;
 
 public class Constants {
     public static int numberOfCams = 1;
