@@ -12,18 +12,24 @@ import org.photonvision.targeting.PhotonPipelineResult;
 import org.photonvision.targeting.PhotonTrackedTarget;
 
 import edu.wpi.first.apriltag.AprilTagFieldLayout;
+import edu.wpi.first.math.Matrix;
+import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Transform3d;
 import edu.wpi.first.math.geometry.Translation3d;
+import edu.wpi.first.math.numbers.N1;
+import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import frc.robot.Constants;
 
 public class Camera {
 
-    /* =====================================================
+    /*
+     * =====================================================
      * 0. VARIABLES
-     * ===================================================== */
+     * =====================================================
+     */
 
     private PhotonCamera camera; // The PhotonCamera instance
     private String cameraName; // The name of the camera
@@ -31,6 +37,11 @@ public class Camera {
     private PhotonPoseEstimator poseEstimator; // The pose estimator for AprilTag cameras
     private Transform3d robotToCameraTransform; // The transform from the robot to the camera
     private PhotonPipelineResult latestResult; // The latest result from the camera
+
+    // Global field estimate constants
+    private static final Matrix<N3, N1> kSingleTagStdDevs = VecBuilder.fill(0.9, 0.9, 12);
+    private static final Matrix<N3, N1> kMultiTagStdDevs = VecBuilder.fill(0.25, 0.25, 4);
+    private static final double GLOBAL_DISTANCE_SCALAR = 25.0;
 
     // Camera constants - FOR THE COLOR CAM ONLY
     private static final double IMAGE_WIDTH = 640.0;
@@ -58,16 +69,18 @@ public class Camera {
         DISCONNECTED // Skips the camera in all logic
     }
 
-    /* =====================================================
+    /*
+     * =====================================================
      * 1. CONSTRUCTOR METHODS
-     * ===================================================== */
+     * =====================================================
+     */
 
     /**
      * Constructor for the Camera class.
      * 
-     * @param nti                    - the NetworkTableInstance of the robot
-     * @param cameraName             - the name of the camera in PhotonVision
-     * @param robotToCameraTransform - the Transform3d from the robot to the camera
+     * @param nti                    - The NetworkTableInstance of the robot
+     * @param cameraName             - The name of the camera in PhotonVision
+     * @param robotToCameraTransform - The Transform3d from the robot to the camera
      */
     public Camera(String cameraName, Transform3d robotToCameraTransform, Type type) {
         System.out.println(NetworkTableInstance.getDefault());
@@ -109,9 +122,11 @@ public class Camera {
         return null; // Return null if loading fails
     }
 
-    /* =====================================================
+    /*
+     * =====================================================
      * 2. UTILITY / LIFECYCLE METHODS
-     * ===================================================== */
+     * =====================================================
+     */
 
     /**
      * Updates the camera to store its latest results for use in methods.
@@ -119,7 +134,6 @@ public class Camera {
     public void updateResults() {
         List<PhotonPipelineResult> unreadResults = camera.getAllUnreadResults(); // Get all unread results from the
                                                                                  // camera
-
         if (!isConnected()) {
             latestResult = null;
             return;
@@ -133,16 +147,19 @@ public class Camera {
     }
 
     /**
-     * Returns whether the camera is connected or not. 
+     * Returns whether the camera is connected or not.
+     * 
      * @return whether the camera is connected or not.
      */
     public boolean isConnected() {
         return camera.isConnected(); // Return if the camera is connected or not
     }
 
-    /* =====================================================
+    /*
+     * =====================================================
      * 3. GLOBAL POSE
-     * ===================================================== */
+     * =====================================================
+     */
 
     /**
      * Get the global field pose of the robot as estimated by the camera.
@@ -150,7 +167,7 @@ public class Camera {
      * @return EstimatedRobotPose object containing the robot's pose and targets
      *         used to find this, or null if no valid pose is available.
      */
-    public EstimatedRobotPose getGlobalFieldPose() {
+    public PoseEstimateValues getGlobalFieldPose() {
         if (!type.equals(Type.APRIL_TAG) || !isConnected()) { // If the type is not for an AprilTag, return null
             return null;
         }
@@ -160,20 +177,80 @@ public class Camera {
             return null;
         }
 
-        Optional<EstimatedRobotPose> estimatedRobotPose = poseEstimator.update(latestResult); // Estimate the robot's
-                                                                                              // pose using the latest
-                                                                                              // result
+        Optional<EstimatedRobotPose> estimatedRobotPose = poseEstimator.estimateAverageBestTargetsPose(latestResult); // Estimate
+                                                                                                                      // the
+                                                                                                                      // robot's
+        // pose using the latest
+        // result
 
         if (estimatedRobotPose.isPresent()) { // If a valid pose is estimated, return it
-            return estimatedRobotPose.get();
+            EstimatedRobotPose e = estimatedRobotPose.get();
+
+            return new PoseEstimateValues(e.estimatedPose, e.timestampSeconds, calculateStdDevs(e));
         }
 
         return null; // Return null if no valid pose is estimated
     }
 
-    /* =====================================================
+    /**
+     * Calculates new standard deviations This algorithm is a heuristic that creates
+     * dynamic standard
+     * deviations based on number of tags, estimation strategy, and distance from
+     * the tags.
+     * 
+     * @param e - The estimated robot pose
+     * @return The calculated standard deviations for the given estimated pose
+     */
+    private Matrix<N3, N1> calculateStdDevs(EstimatedRobotPose e) {
+        List<PhotonTrackedTarget> targets = e.targetsUsed;
+
+        Matrix<N3, N1> estStdDevs = kSingleTagStdDevs;
+        int numTags = 0;
+        double avgDist = 0.0;
+
+        // Count valid tags and compute average distance
+        for (var tgt : targets) {
+            var tagPose = poseEstimator.getFieldTags().getTagPose(tgt.getFiducialId());
+            if (tagPose.isEmpty())
+                continue;
+
+            numTags++;
+            avgDist += tagPose
+                    .get()
+                    .toPose2d()
+                    .getTranslation()
+                    .getDistance(e.estimatedPose.toPose2d().getTranslation());
+        }
+
+        // No valid tags → fall back to single-tag trust
+        if (numTags == 0) {
+            return kSingleTagStdDevs;
+        }
+
+        avgDist /= numTags;
+
+        // Prefer multi-tag baseline when available
+        if (numTags > 1) {
+            estStdDevs = kMultiTagStdDevs;
+        }
+
+        // Hard reject bad single-tag solves far away
+        if (numTags == 1 && avgDist > 4.0) {
+            return VecBuilder.fill(
+                    Double.MAX_VALUE,
+                    Double.MAX_VALUE,
+                    Double.MAX_VALUE);
+        }
+
+        // Distance-based scaling
+        return estStdDevs.times(1.0 + (avgDist * avgDist / GLOBAL_DISTANCE_SCALAR));
+    }
+
+    /*
+     * =====================================================
      * 4. APRILTAG METHODS
-     * ===================================================== */
+     * =====================================================
+     */
 
     /**
      * Get a list of all available AprilTag IDs detected by the camera.
@@ -202,7 +279,7 @@ public class Camera {
     /**
      * Get the pose of a specific AprilTag relative to the robot.
      * 
-     * @param tagID - the ID of the AprilTag to find.
+     * @param tagID - The ID of the AprilTag to find.
      * @return Transform3d of the specified tag relative to the robot, or null if
      *         not found.
      */
@@ -228,15 +305,17 @@ public class Camera {
         return null; // Return null if the specified tagID is not found
     }
 
-    /* =====================================================
+    /*
+     * =====================================================
      * 5. OBJECT DETECTION
-     * ===================================================== */
-    
+     * =====================================================
+     */
+
     /**
      * Get a list of all of the specific object poses of the type passed
      * 
-     * @param type - the type to look for
-     * @return a list of all specific object poses of the type passed
+     * @param type - The type to look for
+     * @return A list of all specific object poses of the type passed
      */
     public List<Pose3d> getObjects(Type type) {
         ArrayList<Pose3d> poses = new ArrayList<>(); // Initialize the list
@@ -307,15 +386,17 @@ public class Camera {
         return new Transform3d(new Translation3d(X, Y, Z), new Rotation3d());
     }
 
-    /* =====================================================
+    /*
+     * =====================================================
      * 6. POSE ADJUSTMENT
-     * ===================================================== */
+     * =====================================================
+     */
 
     /**
      * Adjust the raw pose obtained from the camera to account for the camera's
      * position and orientation on the robot.
      * 
-     * @param rawPose - the raw Pose3d obtained from the camera.
+     * @param rawPose - The raw Pose3d obtained from the camera.
      * @return Adjusted Pose3d representing the robot's pose on the field.
      */
     private Pose3d adjustPose(Transform3d rawPose) {
@@ -356,23 +437,23 @@ public class Camera {
     private Transform3d normalizeYaw(Transform3d rawTransform) {
         double yawValue = rawTransform.getRotation().getZ();
 
-        if (Math.abs(yawValue) > 90 * Math.PI/180) { 
-            yawValue = Math.PI - Math.abs(yawValue) * -1 * (yawValue/Math.abs(yawValue));
-        }
-        else {
+        if (Math.abs(yawValue) > 90 * Math.PI / 180) {
+            yawValue = Math.PI - Math.abs(yawValue) * -1 * (yawValue / Math.abs(yawValue));
+        } else {
             return rawTransform;
         }
 
         Rotation3d rotation = rawTransform.getRotation();
 
-
         return new Transform3d(rawTransform.getTranslation(),
-                               new Rotation3d(rotation.getX(), rotation.getY(), yawValue));
+                new Rotation3d(rotation.getX(), rotation.getY(), yawValue));
     }
 
-    /* =====================================================
+    /*
+     * =====================================================
      * 7. GETTERS / SETTERS
-     * ===================================================== */
+     * =====================================================
+     */
 
     /**
      * Get the type of object the camera detects.
@@ -400,7 +481,7 @@ public class Camera {
     /**
      * Change the primary pose strategy used by the pose estimator.
      * 
-     * @param newStrategy - the new PoseStrategy to set as primary.
+     * @param newStrategy - The new PoseStrategy to set as primary.
      */
     public void changePrimaryPoseStrategy(PoseStrategy newStrategy) {
         if (!type.equals(Type.APRIL_TAG)) { // If the type is not for an AprilTag, do nothing
