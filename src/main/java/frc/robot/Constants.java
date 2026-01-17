@@ -4,7 +4,7 @@ import edu.wpi.first.apriltag.AprilTagFields;
 
 public class Constants {
     public static int numberOfCams = 1;
-    public static final AprilTagFields FIELD_LAYOUT = AprilTagFields.k2025ReefscapeWelded;
+    public static final AprilTagFields FIELD_LAYOUT = AprilTagFields.k2026RebuiltWelded;
     
     public static final double AUTO_X_OFFSET = 0;
     public static final double AUTO_ROLL_OFFSET = 0;

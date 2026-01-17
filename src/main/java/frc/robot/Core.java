@@ -14,6 +14,7 @@ import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Transform3d;
 import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
 import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.InstantCommand;
@@ -62,7 +63,7 @@ public class Core {
 
     public void configureShuffleBoard() {
 
-        //ShuffleboardTab tab = Shuffleboard.getTab("Test");
+        ShuffleboardTab tab = Shuffleboard.getTab("Test");
 
         // Limelight
         // HttpCamera httpCamera = new HttpCamera("Limelight",
@@ -77,7 +78,7 @@ public class Core {
         // Field
         //tab.add(drivetrain.getField()).withPosition(2, 1).withSize(5, 3);
 
-        // Modes
+         // Modes
         // tab.addBoolean("Slow Mode", () -> isSlow()).withPosition(2, 0).withSize(2,
         // 1);
         // tab.addBoolean("Roll Mode", () -> isRoll()).withPosition(5, 0).withSize(1,
@@ -87,11 +88,14 @@ public class Core {
         // pos.addDouble("Robot R", () -> drivetrain.getRobotR())
         // .withWidget("Gyro");
         // ;
-        //tab.addDouble("Robot Y", () -> drivetrain.getRobotY());
+        tab.addDouble("Robot Y", () -> drivetrain.getRobotY());
         // .withWidget("Number Bar");
-        //tab.addDouble("Robot X", () -> drivetrain.getRobotX());
+        tab.addDouble("Robot X", () -> drivetrain.getRobotX());
 
         // tab.addBoolean("IN RANGE", () -> drivetrain.robotNearHP());
+
+        // tab.add("Auto Chooser", autoChooser);
+
     }
 
     private void configureBindings() {
