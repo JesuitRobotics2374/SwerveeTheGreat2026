@@ -142,8 +142,8 @@ public class DriveSubsystem extends TunerSwerveDrivetrain implements Subsystem {
         for (int i = 0; i < estimates.size(); i++) {
             PoseEstimateValues estimate = estimates.get(i);
             if (estimate != null) {
-                addVisionMeasurement(estimate.estimatedPose.toPose2d(), estimate.timestampSeconds);
-                estimator.addVisionMeasurement(estimate.estimatedPose.toPose2d(), estimate.timestampSeconds);
+                addVisionMeasurement(estimate.estimatedPose.toPose2d(), estimate.timestampSeconds, estimate.standardDeviations);
+                estimator.addVisionMeasurement(estimate.estimatedPose.toPose2d(), estimate.timestampSeconds, estimate.standardDeviations);
             } else {
                 // System.out.println("Estimated pose NULL");
             }
