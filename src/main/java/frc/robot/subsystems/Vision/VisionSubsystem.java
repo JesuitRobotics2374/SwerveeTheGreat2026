@@ -158,8 +158,6 @@ public class VisionSubsystem extends SubsystemBase {
             allTags.addAll(cameras[i].getAllAvailableTagIDs());
         }
 
-        System.out.println(allTags.toString());
-
         return allTags; // Return the list of all visible tag IDs
     }
 
@@ -339,7 +337,7 @@ public class VisionSubsystem extends SubsystemBase {
      * @param poses - The list of Pose3d objects to average.
      * @return The averaged Pose3d object.
      */
-    public Pose3d averagePoses(ArrayList<Pose3d> poses) {
+    private Pose3d averagePoses(ArrayList<Pose3d> poses) {
         double x = 0;
         double y = 0;
         double z = 0;

@@ -33,15 +33,15 @@ public class DirectAlign extends Command {
     private final SlewRateLimiter yawRateLimiter = new SlewRateLimiter(100.0);
 
     // Position tolerance thresholds
-    private static final double X_TOLERANCE = 0.05; // meters
-    private static final double Y_TOLERANCE = 0.025; // meters
+    private static final double X_TOLERANCE = 0.04; // meters
+    private static final double Y_TOLERANCE = 0.05; // meters
     private static final double YAW_TOLERANCE = 5 * Math.PI / 180; // radians
 
     // Maximum output valuess
     private static final double MAX_LINEAR_SPEED = 2.4;
     private static final double MAX_ANGULAR_SPEED = 0.5;
 
-    private static final double X_SPEED_MODIFIER = 1;
+    private static final double X_SPEED_MODIFIER = 2;
     private static final double Y_SPEED_MODIFIER = 0.75;
     private static final double THETA_SPEED_MODIFIER = 0.75;
 

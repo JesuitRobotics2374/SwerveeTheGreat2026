@@ -9,13 +9,22 @@ import static edu.wpi.first.units.Units.*;
 import com.ctre.phoenix6.swerve.SwerveModule.DriveRequestType;
 import com.ctre.phoenix6.swerve.SwerveRequest;
 
+import edu.wpi.first.math.geometry.Pose3d;
+import edu.wpi.first.math.geometry.Rotation3d;
+import edu.wpi.first.math.geometry.Transform3d;
 import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
 import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
+import edu.wpi.first.wpilibj2.command.InstantCommand;
 import edu.wpi.first.wpilibj2.command.PrintCommand;
+import edu.wpi.first.wpilibj2.command.SequentialCommandGroup;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
+import frc.robot.Align.CanAlign;
+import frc.robot.Align.DirectAlign;
+import frc.robot.Align.ExactAlign;
+import frc.robot.Align.Target;
 import frc.robot.generated.TunerConstants;
 import frc.robot.subsystems.DriveSubsystem;
 import frc.robot.subsystems.Vision.VisionSubsystem;
@@ -41,6 +50,11 @@ public class Core {
 
     private final double constantSlow = 0.25;
 
+    private final Target testTarget = new Target(31, new Transform3d(1.69, 0.1, 0, new Rotation3d()));
+
+
+    private final SequentialCommandGroup climbAlign = new SequentialCommandGroup(new DirectAlign(drivetrain, vision, testTarget), new CanAlign(drivetrain, vision, testTarget.requestFiducialID().get(), false));
+
     public Core() {
         configureBindings();
         //configureShuffleBoard();
@@ -48,7 +62,7 @@ public class Core {
 
     public void configureShuffleBoard() {
 
-        ShuffleboardTab tab = Shuffleboard.getTab("Test");
+        //ShuffleboardTab tab = Shuffleboard.getTab("Test");
 
         // Limelight
         // HttpCamera httpCamera = new HttpCamera("Limelight",
@@ -94,21 +108,19 @@ public class Core {
 
         // Idle while the robot is disabled. This ensures the configured
         // neutral mode is applied to the drive motors while disabled.
-        final var idle = new SwerveRequest.Idle();
-        RobotModeTriggers.disabled().whileTrue(
-            drivetrain.applyRequest(() -> idle).ignoringDisable(true)
-        );
+        // final var idle = new SwerveRequest.Idle();
+        // RobotModeTriggers.disabled().whileTrue(
+        //     drivetrain.applyRequest(() -> idle).ignoringDisable(true)
+        // );
 
 
         // reset the field-centric heading on left bumper press 
         driveController.start().onTrue(drivetrain.runOnce(() -> drivetrain.seedFieldCentric()));
 
-        driveController.a().onTrue(vision.runOnce(() -> vision.getAllVisibleTagIDs()));
-       // driveController.b().onTrue(new PrintCommand(vision.getTagRelativeToBot(10).toString()));
-        driveController.x().onTrue(new PrintCommand(vision.runOnce(() -> vision.getAllVisibleTagIDs()).toString()));
-        driveController.y().onTrue(new PrintCommand(vision.runOnce(() -> vision.getAllVisibleTagIDs()).toString()));
+        driveController.a().onTrue(new DirectAlign(drivetrain, vision, testTarget));
+        driveController.b().onTrue(new CanAlign(drivetrain, vision, testTarget.requestFiducialID().get(), false));
 
-        //driveController.b().onTrue(new PrintCommand(vision.getConnection() + ""));
+        driveController.x().onTrue(climbAlign);
 
         drivetrain.registerTelemetry(logger::telemeterize);
     }
