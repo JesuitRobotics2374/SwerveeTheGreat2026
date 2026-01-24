@@ -9,6 +9,7 @@ import static edu.wpi.first.units.Units.*;
 import com.ctre.phoenix6.swerve.SwerveModule.DriveRequestType;
 import com.ctre.phoenix6.swerve.SwerveRequest;
 
+import edu.wpi.first.math.filter.SlewRateLimiter;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Transform3d;
@@ -25,14 +26,16 @@ import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
 import frc.robot.Align.CanAlign;
 import frc.robot.Align.DirectAlign;
 import frc.robot.Align.ExactAlign;
+import frc.robot.Align.FixYawToHub;
 import frc.robot.Align.Target;
 import frc.robot.generated.TunerConstants;
 import frc.robot.subsystems.DriveSubsystem;
 import frc.robot.subsystems.Vision.VisionSubsystem;
 
 public class Core {
-    private double MaxSpeed = TunerConstants.kSpeedAt12Volts.in(MetersPerSecond); // kSpeedAt12Volts desired top speed
-    private double MaxAngularRate = RotationsPerSecond.of(0.75).in(RadiansPerSecond); // 3/4 of a rotation per second max angular velocity
+    private double MaxSpeed = TunerConstants.kSpeedAt12Volts.in(MetersPerSecond) * 0.75; // kSpeedAt12Volts desired top speed
+    private double MaxAngularRate = RotationsPerSecond.of(0.75).in(RadiansPerSecond); // 3/4 of a rotation per second
+                                                                                      // max angular velocity
 
     /* Setting up bindings for necessary control of the swerve drive platform */
     private final SwerveRequest.FieldCentric drive = new SwerveRequest.FieldCentric()
@@ -53,12 +56,24 @@ public class Core {
 
     private final Target testTarget = new Target(31, new Transform3d(1.69, 0.1, 0, new Rotation3d()));
 
+    private final FixYawToHub fixYawToHub = new FixYawToHub(drivetrain, false);
 
-    private final SequentialCommandGroup climbAlign = new SequentialCommandGroup(new DirectAlign(drivetrain, vision, testTarget), new CanAlign(drivetrain, vision, testTarget.requestFiducialID().get(), false));
+    private final SequentialCommandGroup climbAlign = new SequentialCommandGroup(
+            new DirectAlign(drivetrain, vision, testTarget),
+            new CanAlign(drivetrain, vision, testTarget.requestFiducialID().get(), false));
+
+    private boolean hubYawAlign = false;
+
+     private static final double TranslationalAccelerationLimit = 10; // meters per second^2
+    private static final double RotationalAccelerationLimit = Math.PI * 5.5; // radians per second^2
+
+    private final SlewRateLimiter xRateLimiter = new SlewRateLimiter(TranslationalAccelerationLimit);
+    private final SlewRateLimiter yRateLimiter = new SlewRateLimiter(TranslationalAccelerationLimit);
+    private final SlewRateLimiter omegaRateLimiter = new SlewRateLimiter(RotationalAccelerationLimit);
 
     public Core() {
         configureBindings();
-        //configureShuffleBoard();
+        // configureShuffleBoard();
     }
 
     public void configureShuffleBoard() {
@@ -76,9 +91,9 @@ public class Core {
         // Layout").withPosition(0, 0).withSize(2, 3);
 
         // Field
-        //tab.add(drivetrain.getField()).withPosition(2, 1).withSize(5, 3);
+        // tab.add(drivetrain.getField()).withPosition(2, 1).withSize(5, 3);
 
-         // Modes
+        // Modes
         // tab.addBoolean("Slow Mode", () -> isSlow()).withPosition(2, 0).withSize(2,
         // 1);
         // tab.addBoolean("Roll Mode", () -> isRoll()).withPosition(5, 0).withSize(1,
@@ -103,22 +118,38 @@ public class Core {
         // and Y is defined as to the left according to WPILib convention.
         drivetrain.setDefaultCommand(
             // Drivetrain will execute this command periodically
-            drivetrain.applyRequest(() ->
-                drive.withVelocityX(-driveController.getLeftY() * MaxSpeed * getAxisMovementScale() * 0.5) // Drive forward with negative Y (forward)
-                    .withVelocityY(-driveController.getLeftX() * MaxSpeed * getAxisMovementScale() * 0.5) // Drive left with negative X (left)
-                    .withRotationalRate(-driveController.getRightX() * MaxAngularRate * getAxisMovementScale() * 0.5) // Drive counterclockwise with negative X (left)
-            )
+            drivetrain.applyRequest(() -> {
+                double axisScale = getAxisMovementScale();
+
+                double driverVelocityX = driveController.getLeftY() * MaxSpeed * axisScale;
+                double driverVelocityY = driveController.getLeftX() * MaxSpeed * axisScale;
+                double driverRotationalRate = -driveController.getRightX() * MaxAngularRate * axisScale;
+
+                // Determine which controller is active
+                // boolean driverActive =
+                //     Math.abs(driverVelocityX) > 0.05 ||
+                //     Math.abs(driverVelocityY) > 0.05 ||
+                //     Math.abs(driverRotationalRate) > 0.05;
+                boolean driverActive = Math.abs(driveController.getRightX()) > 0.1 || !hubYawAlign;
+
+                double desiredRotationalRate = driverActive ? driverRotationalRate : calculateRotationalRate();
+
+                    return drive
+                        .withVelocityX(xRateLimiter.calculate(-driverVelocityX)) // Limit translational acceleration forward/backward
+                        .withVelocityY(yRateLimiter.calculate(-driverVelocityY)) // Limit translational acceleration left/right
+                        .withRotationalRate(omegaRateLimiter.calculate(desiredRotationalRate));
+            })
+
         );
 
         // Idle while the robot is disabled. This ensures the configured
         // neutral mode is applied to the drive motors while disabled.
         // final var idle = new SwerveRequest.Idle();
         // RobotModeTriggers.disabled().whileTrue(
-        //     drivetrain.applyRequest(() -> idle).ignoringDisable(true)
+        // drivetrain.applyRequest(() -> idle).ignoringDisable(true)
         // );
 
-
-        // reset the field-centric heading on left bumper press 
+        // reset the field-centric heading on left bumper press
         driveController.start().onTrue(drivetrain.runOnce(() -> drivetrain.seedFieldCentric()));
 
         driveController.a().onTrue(new DirectAlign(drivetrain, vision, testTarget));
@@ -126,10 +157,16 @@ public class Core {
 
         driveController.x().onTrue(climbAlign);
 
+        driveController.povUp().onTrue(new InstantCommand(() -> {
+            fixYawToHub.schedule();
+            hubYawAlign = true;
+        }));
+        driveController.povDown().onTrue(new InstantCommand(() -> {
+            fixYawToHub.cancel(); 
+            hubYawAlign = false;}));
+
         drivetrain.registerTelemetry(logger::telemeterize);
     }
-
-
 
     public Command getAutonomousCommand() {
         return Commands.print("No autonomous command configured");
@@ -137,5 +174,9 @@ public class Core {
 
     public double getAxisMovementScale() {
         return (1 - (driveController.getRightTriggerAxis() * 0.75));
+    }
+
+    private double calculateRotationalRate() {
+        return fixYawToHub.getRotationalRate();
     }
 }
