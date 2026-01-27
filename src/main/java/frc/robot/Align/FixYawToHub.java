@@ -24,7 +24,7 @@ public class FixYawToHub extends Command {
     private final SlewRateLimiter yawRateLimiter = new SlewRateLimiter(6.0);
 
     // Position tolerance
-    private static final double YAW_TOLERANCE = 1.5 * Math.PI / 180; // radians
+    private static final double YAW_TOLERANCE = 3 * Math.PI / 180; // radians
 
     // Maximum output values
     private static final double MAX_ANGULAR_SPEED = 2;
@@ -90,7 +90,7 @@ public class FixYawToHub extends Command {
         this.initialErrorYaw = calculateRelativeTheta(drivetrain.getState().Pose);
 
         // Yaw PID coefficients
-        yawController = new PIDController(5, 0.2, 0.2);
+        yawController = new PIDController(5, 0.7, 2);
         yawController.setTolerance(YAW_TOLERANCE);
         yawController.enableContinuousInput(-Math.PI, Math.PI);
     }
