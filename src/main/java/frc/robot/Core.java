@@ -13,6 +13,7 @@ import edu.wpi.first.math.filter.SlewRateLimiter;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Transform3d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
 import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
@@ -27,13 +28,15 @@ import frc.robot.Align.CanAlign;
 import frc.robot.Align.DirectAlign;
 import frc.robot.Align.ExactAlign;
 import frc.robot.Align.FixYawToHub;
+import frc.robot.Align.FixYawToHubPolar;
 import frc.robot.Align.Target;
 import frc.robot.generated.TunerConstants;
 import frc.robot.subsystems.DriveSubsystem;
 import frc.robot.subsystems.Vision.VisionSubsystem;
 
 public class Core {
-    private double MaxSpeed = TunerConstants.kSpeedAt12Volts.in(MetersPerSecond) * 0.75; // kSpeedAt12Volts desired top speed
+    private double MaxSpeed = TunerConstants.kSpeedAt12Volts.in(MetersPerSecond) * 0.75; // kSpeedAt12Volts desired top
+                                                                                         // speed
     private double MaxAngularRate = RotationsPerSecond.of(0.75).in(RadiansPerSecond); // 3/4 of a rotation per second
                                                                                       // max angular velocity
 
@@ -58,13 +61,15 @@ public class Core {
 
     private final FixYawToHub fixYawToHub = new FixYawToHub(drivetrain, false);
 
+    private final FixYawToHubPolar fixYawToHubPolar;
+
     private final SequentialCommandGroup climbAlign = new SequentialCommandGroup(
             new DirectAlign(drivetrain, vision, testTarget),
             new CanAlign(drivetrain, vision, testTarget.requestFiducialID().get(), false));
 
     private boolean hubYawAlign = false;
 
-     private static final double TranslationalAccelerationLimit = 10; // meters per second^2
+    private static final double TranslationalAccelerationLimit = 10; // meters per second^2
     private static final double RotationalAccelerationLimit = Math.PI * 5.5; // radians per second^2
 
     private final SlewRateLimiter xRateLimiter = new SlewRateLimiter(TranslationalAccelerationLimit);
@@ -74,6 +79,8 @@ public class Core {
     public Core() {
         configureBindings();
         // configureShuffleBoard();
+
+        fixYawToHubPolar = new FixYawToHubPolar(drivetrain, false);
     }
 
     public void configureShuffleBoard() {
@@ -117,28 +124,41 @@ public class Core {
         // Note that X is defined as forward according to WPILib convention,
         // and Y is defined as to the left according to WPILib convention.
         drivetrain.setDefaultCommand(
-            // Drivetrain will execute this command periodically
-            drivetrain.applyRequest(() -> {
-                double axisScale = getAxisMovementScale();
+                // Drivetrain will execute this command periodically
+                drivetrain.applyRequest(() -> {
+                    double axisScale = getAxisMovementScale();
 
-                double driverVelocityX = driveController.getLeftY() * MaxSpeed * axisScale;
-                double driverVelocityY = driveController.getLeftX() * MaxSpeed * axisScale;
-                double driverRotationalRate = -driveController.getRightX() * MaxAngularRate * axisScale;
+                    double driverVelocityX = driveController.getLeftY() * MaxSpeed * axisScale;
+                    double driverVelocityY = driveController.getLeftX() * MaxSpeed * axisScale;
+                    double driverRotationalRate = -driveController.getRightX() * MaxAngularRate * axisScale;
 
-                // Determine which controller is active
-                // boolean driverActive =
-                //     Math.abs(driverVelocityX) > 0.05 ||
-                //     Math.abs(driverVelocityY) > 0.05 ||
-                //     Math.abs(driverRotationalRate) > 0.05;
-                boolean driverActive = Math.abs(driveController.getRightX()) > 0.1 || !hubYawAlign;
+                    // Detect real driver input ONLY
+                    boolean driverInput = Math.abs(driveController.getRightX()) > 0.1
+                            || Math.abs(driveController.getLeftX()) > 0.1
+                            || Math.abs(driveController.getLeftY()) > 0.1;
 
-                double desiredRotationalRate = driverActive ? driverRotationalRate : calculateRotationalRate();
+                    // Auto yaw is allowed only when enabled AND driver is hands-off
+                    boolean allowAuto = hubYawAlign && !driverInput;
+
+                    double desiredRotationalRate = allowAuto
+                            ? calculateSpeeds().omegaRadiansPerSecond
+                            : driverRotationalRate;
+
+                    double desiredX = allowAuto
+                            ? calculateSpeeds().vxMetersPerSecond
+                            : driverVelocityX;
+
+                    double desiredY = allowAuto
+                            ? calculateSpeeds().vyMetersPerSecond
+                            : driverVelocityY;
 
                     return drive
-                        .withVelocityX(xRateLimiter.calculate(-driverVelocityX)) // Limit translational acceleration forward/backward
-                        .withVelocityY(yRateLimiter.calculate(-driverVelocityY)) // Limit translational acceleration left/right
-                        .withRotationalRate(omegaRateLimiter.calculate(desiredRotationalRate));
-            })
+                            .withVelocityX(xRateLimiter.calculate(-desiredX)) // Limit translational acceleration
+                                                                              // forward/backward
+                            .withVelocityY(yRateLimiter.calculate(-desiredY)) // Limit translational acceleration
+                                                                              // left/right
+                            .withRotationalRate(omegaRateLimiter.calculate(desiredRotationalRate));
+                })
 
         );
 
@@ -157,13 +177,11 @@ public class Core {
 
         driveController.x().onTrue(climbAlign);
 
-        driveController.povUp().onTrue(new InstantCommand(() -> {
-            fixYawToHub.schedule();
-            hubYawAlign = true;
-        }));
-        driveController.povDown().onTrue(new InstantCommand(() -> {
-            fixYawToHub.cancel(); 
-            hubYawAlign = false;}));
+        driveController.povUp().onTrue(
+                new InstantCommand(() -> hubYawAlign = true));
+
+        driveController.povDown().onTrue(
+                new InstantCommand(() -> hubYawAlign = false));
 
         drivetrain.registerTelemetry(logger::telemeterize);
     }
@@ -176,7 +194,11 @@ public class Core {
         return (1 - (driveController.getRightTriggerAxis() * 0.75));
     }
 
-    private double calculateRotationalRate() {
+    private double calculateRotationalRateNormal() {
         return fixYawToHub.getRotationalRate();
+    }
+
+    private ChassisSpeeds calculateSpeeds() {
+        return fixYawToHubPolar.getChassisSpeeds();
     }
 }
